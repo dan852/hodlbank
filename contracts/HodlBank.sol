@@ -26,6 +26,7 @@ contract HodlBank is Ownable {
         uint256 dueOn; 
         uint256 nextDividend;
         uint256 initialAmount;
+        bool active;
         StrategyRatio[] ratios;
     }
 
@@ -75,6 +76,7 @@ contract HodlBank is Ownable {
         s.dueOn = block.timestamp + _depositTime;
         s.nextDividend = block.timestamp + 1 days;
         s.initialAmount = msg.value;
+        s.active = true;
 
         for(uint256 i = 0; i < _ratios.length; i++) {
             StrategyRatio memory ratio = _ratios[i];
@@ -131,8 +133,9 @@ function swapExactEthToToken(address _token, uint256 _amount) internal returns(u
         for(uint256 i = 0; i < ownerToStrategy[msg.sender].length; i++) {
             console.log(ownerToStrategy[msg.sender][i]);
             Strategy storage strategy = strategies[ownerToStrategy[msg.sender][i]];
-
-            _strategies[i] = strategy;
+            if(strategy.active == true) {
+                _strategies[i] = strategy;
+            }
         }
         return _strategies;
     }
@@ -160,7 +163,7 @@ function swapExactEthToToken(address _token, uint256 _amount) internal returns(u
     }
 
     function removeStrategy(uint256 _strategyId) internal onlyStrategyOwner(_strategyId) { 
-        delete strategies[_strategyId];
+        strategies[_strategyId].active = false;
         
         if(ownerToStrategy[msg.sender].length == 1) {
             delete ownerToStrategy[msg.sender];
