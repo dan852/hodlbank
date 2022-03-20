@@ -1,4 +1,6 @@
 const hre = require("hardhat");
+const fs = require("fs");
+const path = require("path");
 
 async function main() {
   const HodlBank = await hre.ethers.getContractFactory("HodlBank");
@@ -15,7 +17,7 @@ async function main() {
 
   console.log("HodlBank deployed to:", hodl.address);
 
-  const MAX_SUPPLY = 10000000;
+  const MAX_SUPPLY = hre.ethers.utils.parseUnits("1000000.0", 18);
 
   const HodlBankToken = await hre.ethers.getContractFactory("HodlBankToken");
   const hodlToken = await HodlBankToken.deploy(MAX_SUPPLY);
@@ -26,6 +28,16 @@ async function main() {
 
   const balance = await hodlToken.balanceOf(hodl.address);
   console.log("HodlBank Contract Balance is", balance);
+
+  await hodl.setHbnkTokenAddress(hodlToken.address);
+
+  const addresses = { contract: hodl.address, token: hodlToken.address };
+  fs.writeFileSync(
+    path.join(__dirname, "../frontend/src/models/addresses.json"),
+    JSON.stringify(addresses)
+  );
+
+  console.log("Deploy done");
 }
 
 // We recommend this pattern to be able to use async/await everywhere

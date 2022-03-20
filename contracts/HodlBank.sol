@@ -24,7 +24,6 @@ contract HodlBank is Ownable {
         uint256 strategyId;
         uint256 createdOn;
         uint256 dueOn; 
-        uint256 nextDividend;
         uint256 initialAmount;
         bool active;
         StrategyRatio[] ratios;
@@ -38,10 +37,9 @@ contract HodlBank is Ownable {
     mapping(address => uint256[]) public ownerToStrategy;
     mapping(uint256 => address) public strategyToOwner;
     mapping(address => bool) public isAllowedToken;
-    //mapping(uint256 => StrategyRatio[]) public strategyRatios;
 
     address[] public allowedTokens;
-    //Strategy[] public strategies;
+    address public hbnkToken;
 
     uint256 numStrategies;
 
@@ -74,7 +72,6 @@ contract HodlBank is Ownable {
         s.name = _name;
         s.createdOn = block.timestamp;
         s.dueOn = block.timestamp + _depositTime;
-        s.nextDividend = block.timestamp + 1 days;
         s.initialAmount = msg.value;
         s.active = true;
 
@@ -147,19 +144,23 @@ function swapExactEthToToken(address _token, uint256 _amount) internal returns(u
         bool success;
 
         removeStrategy(_strategyId);
+        payReward(strategy.createdOn, strategy.dueOn);
 
         for(uint256 i = 0; i < strategy.ratios.length; i++) {
             StrategyRatio memory ratio = strategy.ratios[i];
             console.log(ratio.token, ratio.value);
 
-            if(isDue) {
-                success = IERC20(ratio.token).transfer(strategy.owner, ratio.value);
-            } else {
-                success = IERC20(ratio.token).transfer(strategy.owner, (ratio.value / 2));
+            uint256 value = ratio.value;
+            if(!isDue) {
+                value = ratio.value / 2;
             }
 
+            require(IERC20(ratio.token).balanceOf(address(this)) >= value, "insuff funds");
+            success = IERC20(ratio.token).transfer(strategy.owner, ratio.value);
             require(success, "transfer failed");
         }
+
+        
     }
 
     function removeStrategy(uint256 _strategyId) internal onlyStrategyOwner(_strategyId) { 
@@ -177,6 +178,19 @@ function swapExactEthToToken(address _token, uint256 _amount) internal returns(u
         }
         
         delete strategyToOwner[_strategyId];
+    } 
+
+    function calculateReward(uint256 _createdOn, uint256 _dueOn) internal view returns(uint256 reward) {
+        require(_dueOn > _createdOn, "timestamp error");
+        
+        reward = mulDiv((_dueOn - _createdOn), 1, 86400) * (10 ** 18) ;
+        console.log("reward", reward);
+    }
+    function payReward(uint256 _createdOn, uint256 _dueOn) internal returns(bool success) {
+        uint256 reward = calculateReward(_createdOn, _dueOn);
+        console.log(IERC20(hbnkToken).balanceOf(address(this)));
+        require(IERC20(hbnkToken).balanceOf(address(this)) >= reward, "insuff funds");
+        success = IERC20(hbnkToken).transfer(msg.sender, reward);
     } 
 
     function checkStrategyRatios(StrategyRatio[] memory _ratios) internal pure returns(bool) {
@@ -204,6 +218,10 @@ function swapExactEthToToken(address _token, uint256 _amount) internal returns(u
 
     function getAllowedTokens() external view returns(address[] memory) {
         return allowedTokens;
+    }
+
+    function setHbnkTokenAddress(address _tokenAddress) external onlyOwner {
+        hbnkToken = _tokenAddress;
     }
 
     function mulDiv (uint x, uint y, uint z) public pure returns (uint)
