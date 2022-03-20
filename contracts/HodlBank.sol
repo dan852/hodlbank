@@ -143,7 +143,7 @@ function swapExactEthToToken(address _token, uint256 _amount) internal returns(u
     function withdrawStrategy(uint256 _strategyId) external onlyStrategyOwner(_strategyId) {
         Strategy storage strategy = strategies[_strategyId];
         
-        bool isDue = (strategy.dueOn >= block.timestamp);
+        bool isDue = (strategy.dueOn <= block.timestamp);
         bool success;
 
         removeStrategy(_strategyId);
