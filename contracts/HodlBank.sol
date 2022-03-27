@@ -48,7 +48,8 @@ contract HodlBank is Ownable {
         _;
     }
 
-    event StrategyDeployed(uint256 _strategyId);
+    event StrategyDeployed(uint256 _strategyId, address strategyOwner);
+    event StrategyWithdrawal(uint256 _strategyId, address strategyOwner);
 
     constructor(address[] memory _allowedTokens) {
         require(_allowedTokens.length > 0, "allowed tokens is zero");
@@ -89,40 +90,30 @@ contract HodlBank is Ownable {
         ownerToStrategy[msg.sender].push(strategyId);
         strategyToOwner[strategyId] = msg.sender;
 
-        emit StrategyDeployed(strategyId);
+        emit StrategyDeployed(strategyId, msg.sender);
     }
 
-function swapExactEthToToken(address _token, uint256 _amount) internal returns(uint256 _amountOut){
-    require(msg.value > 0, "Must pass non 0 ETH amount");
+    function swapExactEthToToken(address _token, uint256 _amount) internal returns(uint256 _amountOut){
+        require(msg.value > 0, "Must pass non 0 ETH amount");
 
-    uint256 deadline = block.timestamp + 15;
-    address tokenIn = WETH9;
-    uint24 fee = 3000;
-    uint256 amountOutMinimum = 1;
-    uint160 sqrtPriceLimitX96 = 0;
-    
-    ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams(
-        tokenIn,
-        _token,
-        fee,
-        address(this),
-        deadline,
-        _amount,
-        amountOutMinimum,
-        sqrtPriceLimitX96
-    );
-    console.log("amount", _amount);
-    _amountOut = uniswapRouter.exactInputSingle{ value: _amount }(params);
-    console.log(_amountOut);
-
-    uint256 tokenBalance = IERC20(_token).balanceOf(address(this));
-    console.log(tokenBalance);
-    //uniswapRouter.refundETH();
-    
-    // refund leftover ETH to user
-    //(bool success,) = msg.sender.call{ value: address(this).balance }("");
-    //require(success, "refund failed");
-  }
+        uint256 deadline = block.timestamp + 15;
+        address tokenIn = WETH9;
+        uint24 fee = 3000;
+        uint256 amountOutMinimum = 1;
+        uint160 sqrtPriceLimitX96 = 0;
+        
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams(
+            tokenIn,
+            _token,
+            fee,
+            address(this),
+            deadline,
+            _amount,
+            amountOutMinimum,
+            sqrtPriceLimitX96
+        );
+        _amountOut = uniswapRouter.exactInputSingle{ value: _amount }(params);
+    }
 
     function getStrategies() external view returns(Strategy[] memory) {
         Strategy[] memory _strategies = new Strategy[](ownerToStrategy[msg.sender].length);
@@ -142,9 +133,12 @@ function swapExactEthToToken(address _token, uint256 _amount) internal returns(u
         
         bool isDue = (strategy.dueOn <= block.timestamp);
         bool success;
-
+        console.log("is due", isDue);
         removeStrategy(_strategyId);
-        payReward(strategy.createdOn, strategy.dueOn);
+
+        if(isDue == true) {
+            payReward(strategy.createdOn, strategy.dueOn);
+        }
 
         for(uint256 i = 0; i < strategy.ratios.length; i++) {
             StrategyRatio memory ratio = strategy.ratios[i];
@@ -156,11 +150,10 @@ function swapExactEthToToken(address _token, uint256 _amount) internal returns(u
             }
 
             require(IERC20(ratio.token).balanceOf(address(this)) >= value, "insuff funds");
-            success = IERC20(ratio.token).transfer(strategy.owner, ratio.value);
+            success = IERC20(ratio.token).transfer(strategy.owner, value);
             require(success, "transfer failed");
         }
-
-        
+        emit StrategyWithdrawal(_strategyId, strategy.owner);
     }
 
     function removeStrategy(uint256 _strategyId) internal onlyStrategyOwner(_strategyId) { 
